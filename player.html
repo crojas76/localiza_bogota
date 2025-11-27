@@ -1,136 +1,103 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>¡Localiza Bogotá!</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>Supabase Player</title>
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Supabase UMD -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        #map { height: 500px; width: 100%; margin-top: 15px; border: 1px solid #aaa; }
-        select, button { padding: 5px; }
-    </style>
+  <style>
+    body {
+      background: #f5f5f5;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #log {
+      background: #111;
+      color: #0f0;
+      padding: 10px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+  </style>
 </head>
+
 <body>
 
-<h1>¡Localiza Bogotá!</h1>
-<p>Selecciona un sitio y haz clic en el mapa para marcar tu respuesta.</p>
+  <h2>Supabase Media Player</h2>
 
-<label for="sitioSelect">Sitio a ubicar:</label>
-<select id="sitioSelect">
-    <option value="">Cargando sitios...</option>
-</select>
+  <!-- Contenedor del reproductor -->
+  <video id="player" controls width="600" style="display:none;"></video>
+  <audio id="player-audio" controls style="display:none;"></audio>
 
-<div id="map"></div>
+  <h3>Consola interna</h3>
+  <div id="log"></div>
 
-<br>
-<button id="btnEnviar">Enviar respuesta</button>
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js";
 
-<script>
-/* -----------------------------
-   CONFIGURACIÓN SUPABASE
------------------------------- */
-const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
-const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o";
+    // ---------------------------------------------------------
+    // CONFIGURACIÓN SUPABASE
+    // ---------------------------------------------------------
+    const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o"; // segura para frontend
 
-// Crear cliente Supabase (UMD)
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    function log(msg) {
+      const logDiv = document.getElementById("log");
+      logDiv.textContent += msg + "\n";
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(msg);
+    }
 
-/* -----------------------------
-   INICIALIZAR MAPA
------------------------------- */
-const map = L.map("map").setView([4.65, -74.1], 12);
+    // ---------------------------------------------------------
+    // FUNCIÓN PRINCIPAL: CARGAR Y REPRODUCIR ARCHIVO
+    // ---------------------------------------------------------
+    async function loadMedia() {
+      log("Inicializando conexión con Supabase...");
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19
-}).addTo(map);
+      // Cambia estos valores según tu bucket y archivo
+      const bucketName = "videos";
+      const fileName = "demo.mp4";
 
-let marcador = null;
-let latSeleccionada = null;
-let lonSeleccionada = null;
+      log("Solicitando URL pública...");
 
-// Capturar clic en el mapa
-map.on("click", (e) => {
-    latSeleccionada = e.latlng.lat;
-    lonSeleccionada = e.latlng.lng;
+      const { data: publicUrlData, error } = await supabase
+        .storage
+        .from(bucketName)
+        .getPublicUrl(fileName);
 
-    if (marcador) map.removeLayer(marcador);
-
-    marcador = L.marker([latSeleccionada, lonSeleccionada]).addTo(map);
-});
-
-
-/* -----------------------------
-   CARGAR LISTA DE SITIOS
------------------------------- */
-async function cargarSitios() {
-    const respuesta = await client
-        .from("sitios_oficiales")
-        .select("*");
-
-    const select = document.getElementById("sitioSelect");
-
-    if (respuesta.error) {
-        console.error("Error cargando sitios:", respuesta.error);
-        select.innerHTML = "<option>Error cargando</option>";
+      if (error) {
+        log("❌ Error obteniendo URL: " + error.message);
+        alert("Error: No se pudo cargar el archivo.");
         return;
+      }
+
+      const fileUrl = publicUrlData.publicUrl;
+      log("✔ Archivo encontrado: " + fileUrl);
+
+      // Detectar tipo según extensión
+      if (fileName.endsWith(".mp4") || fileName.endsWith(".webm")) {
+        const video = document.getElementById("player");
+        video.src = fileUrl;
+        video.style.display = "block";
+        video.play();
+        log("🎬 Reproduciendo video...");
+      } else if (fileName.endsWith(".mp3") || fileName.endsWith(".wav")) {
+        const audio = document.getElementById("player-audio");
+        audio.src = fileUrl;
+        audio.style.display = "block";
+        audio.play();
+        log("🎵 Reproduciendo audio...");
+      } else {
+        log("⚠ Tipo de archivo no soportado.");
+      }
     }
 
-    const sitios = respuesta.data;
+    loadMedia();
 
-    select.innerHTML = "";
-
-    sitios.forEach(s => {
-        const option = document.createElement("option");
-        option.value = s.sitio_clave;
-        option.textContent = s.sitio_clave; // No existe sitio_nombre
-        select.appendChild(option);
-    });
-}
-
-cargarSitios();
-
-
-/* -----------------------------
-   ENVIAR RESPUESTA
------------------------------- */
-document.getElementById("btnEnviar").addEventListener("click", async () => {
-    const sitio = document.getElementById("sitioSelect").value;
-
-    if (!sitio) {
-        alert("Selecciona un sitio.");
-        return;
-    }
-    if (!latSeleccionada || !lonSeleccionada) {
-        alert("Haz clic en el mapa para elegir un punto.");
-        return;
-    }
-
-    const { data, error } = await client
-        .from("respuestas_juego")
-        .insert({
-            sitio_clave: sitio,
-            lat: latSeleccionada,
-            lon: lonSeleccionada
-        });
-
-    if (error) {
-        console.error("Error al enviar:", error);
-        alert("❌ No se pudo guardar. Ver consola.");
-    } else {
-        alert("✔️ Respuesta enviada correctamente");
-    }
-});
-
-</script>
+  </script>
 
 </body>
 </html>
