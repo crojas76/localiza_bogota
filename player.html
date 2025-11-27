@@ -1,118 +1,142 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Juego Bogotá - Player</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Player - Registrar Respuesta</title>
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-    <!-- Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
+            margin: 20px;
         }
         #map {
-            height: 65vh;
+            height: 400px;
+            width: 100%;
+            margin-bottom: 20px;
+            border: 2px solid #000;
         }
-        .container {
-            padding: 12px;
+        .field {
+            margin-bottom: 10px;
         }
         button {
-            padding: 9px 14px;
-            margin-top: 10px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
         }
     </style>
 </head>
-
 <body>
 
-<h2 style="text-align:center">Juego: ¿Qué tanto conoces Bogotá?</h2>
+    <h2>Registrar Respuesta</h2>
 
-<div id="map"></div>
+    <div id="map"></div>
 
-<div class="container">
-    <label>Alias del jugador:</label><br>
-    <input id="alias" placeholder="Ej: jugador01"><br><br>
+    <div class="field">
+        <label>Nombre jugador:</label>
+        <input type="text" id="player_name" placeholder="Tu nombre">
+    </div>
 
-    <label>Selecciona el sitio que estás ubicando:</label><br>
-    <select id="site">
-        <option value="p1">Plaza de Bolívar</option>
-        <option value="p2">Parque 93</option>
-        <option value="p3">Museo Nacional</option>
-        <option value="p4">Movistar Arena</option>
-        <option value="p5">Aeropuerto El Dorado</option>
-    </select><br><br>
+    <div class="field">
+        <label>Pregunta:</label>
+        <input type="text" id="question" placeholder="Pregunta asignada">
+    </div>
 
-    <button onclick="sendData()">Enviar ubicación</button>
+    <div class="field">
+        <label>Respuesta:</label>
+        <input type="text" id="answer" placeholder="Tu respuesta">
+    </div>
 
-    <p id="msg"></p>
-</div>
+    <div class="field">
+        <label>Latitud:</label>
+        <input type="text" id="lat" readonly>
+    </div>
 
-<script>
-// ------------------------------------------------------
-// CONFIGURACIÓN SUPABASE
-// ------------------------------------------------------
-const SUPABASE_URL = 'https://czppmgrvffpuoiaoduxx.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls';
+    <div class="field">
+        <label>Longitud:</label>
+        <input type="text" id="lng" readonly>
+    </div>
 
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    <button onclick="enviar()">Enviar</button>
 
-// ------------------------------------------------------
-// MAPA LEAFLET
-// ------------------------------------------------------
-const map = L.map('map').setView([4.65, -74.1], 12);
+    <p id="status"></p>
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-}).addTo(map);
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-// Marcador por defecto (se moverá con clic)
-let marker = L.marker([4.65, -74.1], { draggable: true }).addTo(map);
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-// Actualizar posición al hacer clic
-map.on("click", function(e) {
-    marker.setLatLng(e.latlng);
-});
+    <script>
+        // === CONFIGURACIÓN SUPABASE CORREGIDA ===
+        const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
 
-// ------------------------------------------------------
-// FUNCIÓN PARA ENVIAR DATOS
-// ------------------------------------------------------
-async function sendData() {
-    const alias = document.getElementById("alias").value;
-    const site = document.getElementById("site").value;
-    const pos = marker.getLatLng();
-    const msg = document.getElementById("msg");
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    if (!alias || alias.trim() === "") {
-        msg.innerHTML = "⚠ Debes ingresar un alias.";
-        return;
-    }
+        // === MAPA ===
+        const map = L.map("map").setView([4.6097, -74.0817], 12);
 
-    const { data, error } = await db
-        .from("responses")
-        .insert([
-            {
-                alias: alias,
-                site: site,
-                lat: pos.lat,
-                lon: pos.lng   // <<-- CORRECTO: usamos lon (NO lng)
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19
+        }).addTo(map);
+
+        let marker = null;
+
+        // Permitir selección de puntos como antes
+        map.on("click", function (e) {
+            const lat = e.latlng.lat.toFixed(6);
+            const lng = e.latlng.lng.toFixed(6);
+
+            document.getElementById("lat").value = lat;
+            document.getElementById("lng").value = lng;
+
+            if (marker) map.removeLayer(marker);
+            marker = L.marker([lat, lng]).addTo(map);
+        });
+
+        // === ENVIAR A SUPABASE ===
+        async function enviar() {
+            const player_name = document.getElementById("player_name").value.trim();
+            const question = document.getElementById("question").value.trim();
+            const answer = document.getElementById("answer").value.trim();
+            const lat = document.getElementById("lat").value.trim();
+            const lng = document.getElementById("lng").value.trim();
+
+            if (!player_name || !question || !answer || !lat || !lng) {
+                document.getElementById("status").innerHTML = "❌ Faltan campos por completar.";
+                return;
             }
-        ]);
 
-    if (error) {
-        msg.innerHTML = "❌ Error al enviar: " + error.message;
-        return;
-    }
+            const { data, error } = await supabase
+                .from("responses")
+                .insert({
+                    player_name: player_name,
+                    question: question,
+                    answer: answer,
+                    lat: parseFloat(lat),
+                    lng: parseFloat(lng)
+                });
 
-    msg.innerHTML = "✅ Respuesta enviada correctamente";
-}
-</script>
+            if (error) {
+                document.getElementById("status").innerHTML = "❌ Error al enviar: " + error.message;
+            } else {
+                document.getElementById("status").innerHTML = "✅ Registro enviado correctamente.";
+            }
+        }
+    </script>
 
 </body>
 </html>
