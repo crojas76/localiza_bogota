@@ -1,164 +1,292 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Localiza Bogotá</title>
+  <meta charset="utf-8" />
+  <title>Localiza Bogotá - Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <!-- Leaflet CSS (HEAD) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-
-        #map {
-            width: 100%;
-            height: 500px;
-            border: 2px solid #444;
-            margin-top: 20px;
-        }
-
-        select, button {
-            padding: 10px;
-            font-size: 16px;
-            margin-top: 10px;
-        }
-
-        #status {
-            margin-top: 15px;
-            font-weight: bold;
-        }
-    </style>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:12px;}
+    h1{margin:0 0 8px}
+    #map{height:60vh;border:1px solid #ccc;margin:10px 0}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+    label{font-weight:600}
+    input,select,button{padding:8px;font-size:14px}
+    #status{margin-top:10px;color:green}
+    .small{font-size:13px;color:#444}
+  </style>
 </head>
-
 <body>
 
-<h1>¡Localiza Bogotá!</h1>
-<p>Selecciona un sitio y haz clic en el mapa para marcar tu respuesta.</p>
+  <h1>¡Localiza Bogotá!</h1>
+  <p class="small">Regístrate (alias), selecciona un sitio y haz clic en el mapa para marcar la ubicación. Luego pulsa <b>Enviar respuesta</b>.</p>
 
-<!-- Selector de sitios -->
-<label for="sitioSelect">Sitio a ubicar:</label>
-<select id="sitioSelect">
-    <option value="p1">p1 – Plaza de Bolívar</option>
-    <option value="p2">p2 – Parque 93</option>
-    <option value="p3">p3 – Museo Nacional</option>
-    <option value="p4">p4 – Movistar Arena</option>
-    <option value="p5">p5 – Aeropuerto El Dorado</option>
-</select>
+  <div class="row">
+    <div>
+      <label>Alias</label><br>
+      <input id="alias" placeholder="tu alias" />
+    </div>
 
-<!-- Mapa -->
-<div id="map"></div>
+    <div>
+      <label>Email (opcional)</label><br>
+      <input id="email" placeholder="tu@mail.com" />
+    </div>
 
-<button id="btnEnviar">Enviar respuesta</button>
-<p id="status"></p>
+    <div>
+      <label>Sitio a ubicar</label><br>
+      <select id="sitioSelect">
+        <option value="">Cargando sitios...</option>
+      </select>
+    </div>
 
-<!-- SUPABASE -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <div style="align-self:end">
+      <button id="btnRegister">Registrar / Actualizar</button>
+    </div>
+  </div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MAP -->
+  <div id="map"></div>
 
-<script>
-/* =====================================================
-   1. SUPABASE CONFIG
-===================================================== */
-const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
+  <div class="row">
+    <div>
+      Coordenadas seleccionadas:<br>
+      <input id="coords" readonly style="width:220px"/>
+    </div>
+    <div>
+      <button id="btnSend" disabled>Enviar respuesta</button>
+    </div>
+  </div>
 
-const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  <div id="status" class="small"></div>
 
-let jugadorID = null;
-let marker = null;
-let selectedLat = null;
-let selectedLon = null;
+  <!-- Leaflet JS (antes del module script para que global L exista) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-/* =====================================================
-   2. REGISTRAR JUGADOR ANÓNIMO
-===================================================== */
-async function registrarJugador() {
-    const alias = "jugador_" + Math.floor(Math.random() * 99999);
+  <!-- Usamos módulo para importar supabase ESM y escribir lógica moderna -->
+  <script type="module">
+  import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
-    let { data, error } = await supabase
-        .from("jugadores")
-        .insert([{ alias: alias, anon_code: alias }])
-        .select()
-        .single();
+  // ---------------------------
+  // CONFIGURA: reemplaza si quieres
+  // ---------------------------
+  const SUPABASE_URL = 'https://czppmgrvffpuoiaoduxx.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls';
 
-    if (error) {
-        document.getElementById("status").innerText =
-            "❌ Error creando jugador: " + error.message;
-        return;
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // DOM
+  const aliasEl = document.getElementById('alias');
+  const emailEl = document.getElementById('email');
+  const sitioEl = document.getElementById('sitioSelect');
+  const registerBtn = document.getElementById('btnRegister');
+  const sendBtn = document.getElementById('btnSend');
+  const coordsEl = document.getElementById('coords');
+  const statusEl = document.getElementById('status');
+
+  // estado
+  const STORAGE_KEY = 'localiza_player_v1';
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e){ saved = null; }
+
+  let jugador = null; // { jugador_id, alias, anon_code }
+  let selectedLat = null, selectedLon = null;
+  let playerMarker = null;
+  let officialLayer = null;
+
+  // ---------------------------
+  // Inicializar Leaflet mapa
+  // ---------------------------
+  const map = L.map('map').setView([4.65, -74.08], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'© OpenStreetMap'
+  }).addTo(map);
+
+  officialLayer = L.layerGroup().addTo(map);
+
+  // click para marcar
+  map.on('click', (e) => {
+    selectedLat = Number(e.latlng.lat.toFixed(6));
+    selectedLon = Number(e.latlng.lng.toFixed(6));
+    coordsEl.value = `${selectedLat}, ${selectedLon}`;
+
+    if (playerMarker) playerMarker.remove();
+    playerMarker = L.marker([selectedLat, selectedLon]).addTo(map);
+
+    statusEl.style.color = 'black';
+    statusEl.textContent = `Punto seleccionado: ${selectedLat}, ${selectedLon}`;
+  });
+
+  // ---------------------------
+  // Cargar sitios desde tabla sitios_oficiales (si existe)
+  // ---------------------------
+  async function loadSites() {
+    sitioEl.innerHTML = '<option value="">Cargando sitios...</option>';
+    try {
+      const { data, error } = await supabase
+        .from('sitios_oficiales')
+        .select('sitio_clave, lat, lon')
+        .order('sitio_clave', { ascending:true });
+
+      if (error) throw error;
+
+      if (data && data.length) {
+        sitioEl.innerHTML = '<option value="">-- seleccionar --</option>';
+        officialLayer.clearLayers();
+        data.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.sitio_clave;
+          opt.text = `${s.sitio_clave}  (${s.lat.toFixed(5)}, ${s.lon.toFixed(5)})`;
+          sitioEl.appendChild(opt);
+
+          // mostrar en mapa (círculo pequeño, no marker con etiqueta)
+          const c = L.circle([s.lat, s.lon], { radius: 60, color:'#d00', fill:false }).bindPopup(`${s.sitio_clave}`);
+          officialLayer.addLayer(c);
+        });
+
+        // ajustar vista para mostrar todos los sitios (si hay más de 1)
+        const group = L.featureGroup(officialLayer.getLayers());
+        if (officialLayer.getLayers().length > 0) map.fitBounds(group.getBounds().pad(0.5));
+      } else {
+        // fallback si no hay datos
+        sitioEl.innerHTML = `
+          <option value="">-- seleccionar --</option>
+          <option value="p1">p1 — Plaza de Bolívar</option>
+          <option value="p2">p2 — Parque 93</option>
+          <option value="p3">p3 — Museo Nacional</option>
+          <option value="p4">p4 — Movistar Arena</option>
+          <option value="p5">p5 — Aeropuerto El Dorado</option>
+        `;
+      }
+    } catch(err){
+      console.warn('Error cargando sitios_oficiales:', err.message || err);
+      sitioEl.innerHTML = `
+        <option value="">-- seleccionar --</option>
+        <option value="p1">p1 — Plaza de Bolívar</option>
+        <option value="p2">p2 — Parque 93</option>
+        <option value="p3">p3 — Museo Nacional</option>
+        <option value="p4">p4 — Movistar Arena</option>
+        <option value="p5">p5 — Aeropuerto El Dorado</option>
+      `;
+    }
+  }
+
+  await loadSites();
+
+  // ---------------------------
+  // Manejo jugador: crear o reutilizar
+  // ---------------------------
+  async function ensurePlayer(alias, email) {
+    if (!alias) throw new Error('Alias requerido');
+
+    // si ya guardado localmente y coincide: reuse
+    if (saved && saved.alias === alias && saved.jugador_id) {
+      return saved;
     }
 
-    jugadorID = data.id;
-    console.log("Jugador registrado:", jugadorID);
-}
+    // si hay saved.anon_code buscar registro
+    if (saved && saved.anon_code) {
+      const { data:found, error:selErr } = await supabase
+        .from('jugadores')
+        .select('*')
+        .eq('anon_code', saved.anon_code)
+        .limit(1);
 
-registrarJugador();
-
-/* =====================================================
-   3. CREAR MAPA
-===================================================== */
-let map = L.map("map").setView([4.65, -74.1], 12);
-
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap",
-    maxZoom: 19
-}).addTo(map);
-
-/* =====================================================
-   4. SELECCIÓN EN EL MAPA
-===================================================== */
-map.on("click", function (e) {
-    selectedLat = e.latlng.lat;
-    selectedLon = e.latlng.lng;
-
-    if (marker) map.removeLayer(marker);
-
-    marker = L.marker([selectedLat, selectedLon]).addTo(map);
-
-    document.getElementById("status").innerText =
-        "📍 Selección: " + selectedLat.toFixed(5) + ", " + selectedLon.toFixed(5);
-});
-
-/* =====================================================
-   5. ENVIAR RESPUESTA
-===================================================== */
-document.getElementById("btnEnviar").addEventListener("click", async () => {
-
-    let sitio = document.getElementById("sitioSelect").value;
-
-    if (!jugadorID) {
-        alert("Esperando registro del jugador...");
-        return;
+      if (!selErr && found && found.length) {
+        const j = found[0];
+        // actualizar alias/email si cambió
+        if (j.alias !== alias || (j.correo||'') !== (email||'')) {
+          await supabase.from('jugadores').update({ alias, correo: email||null }).eq('id', j.id);
+        }
+        const out = { jugador_id: j.id, alias: j.alias, anon_code: saved.anon_code };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); saved = out;
+        return out;
+      }
     }
 
-    if (selectedLat === null) {
-        alert("Debes seleccionar un punto en el mapa.");
-        return;
+    // crear nuevo jugador
+    const anon_code = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+(b%16).toString(16),'');
+    const payload = { alias, correo: email||null, anon_code };
+    const { data, error } = await supabase.from('jugadores').insert([payload]).select().limit(1);
+    if (error) throw error;
+    const j = data[0];
+    const out = { jugador_id: j.id, alias: j.alias, anon_code };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); saved = out;
+    return out;
+  }
+
+  // ---------------------------
+  // Eventos: register y send
+  // ---------------------------
+  registerBtn.addEventListener('click', async () => {
+    const alias = aliasEl.value && aliasEl.value.trim();
+    const email = emailEl.value && emailEl.value.trim();
+    if (!alias) { statusEl.style.color='crimson'; statusEl.textContent='Ingresa un alias'; return; }
+    statusEl.style.color='black'; statusEl.textContent='Registrando...';
+    try {
+      const pl = await ensurePlayer(alias, email);
+      jugador = pl;
+      statusEl.style.color='green';
+      statusEl.textContent = `Jugador listo (id: ${pl.jugador_id})`;
+      // permitir enviar
+      sendBtn.disabled = false;
+    } catch(err) {
+      console.error(err);
+      statusEl.style.color='crimson';
+      statusEl.textContent = 'Error registrando: ' + (err.message||err);
     }
+  });
 
-    const { error } = await supabase
-        .from("respuestas_juego")
-        .insert([{
-            jugador_id: jugadorID,
-            sitio_clave: sitio,
-            lat: selectedLat,
-            lon: selectedLon
-        }]);
+  sendBtn.addEventListener('click', async () => {
+    if (!jugador || !jugador.jugador_id) { statusEl.style.color='crimson'; statusEl.textContent='Registra primero'; return; }
+    const sitio_clave = sitioEl.value;
+    if (!sitio_clave) { statusEl.style.color='crimson'; statusEl.textContent='Selecciona un sitio'; return; }
+    if (selectedLat === null || selectedLon === null) { statusEl.style.color='crimson'; statusEl.textContent='Haz clic en el mapa para seleccionar punto'; return; }
 
-    if (error) {
-        document.getElementById("status").innerText =
-            "❌ Error: " + error.message;
-        return;
+    statusEl.style.color='black'; statusEl.textContent = 'Enviando...';
+    try {
+      const payload = {
+        jugador_id: jugador.jugador_id,
+        sitio_clave,
+        lat: selectedLat,
+        lon: selectedLon
+      };
+      // insertar y pedir que trigger calcule distancia/puntaje y nos devuelva columnas calculadas
+      const { data, error } = await supabase.from('respuestas_juego').insert([payload]).select().limit(1);
+      if (error) throw error;
+      const inserted = data && data[0];
+      if (inserted) {
+        if (inserted.distancia_m !== undefined) {
+          statusEl.style.color='green';
+          statusEl.innerHTML = `Registrado. Distancia: <b>${Math.round(inserted.distancia_m||0)} m</b>. Puntaje: <b>${inserted.puntaje||0}</b>`;
+        } else {
+          statusEl.style.color='green';
+          statusEl.textContent = 'Respuesta enviada correctamente';
+        }
+      } else {
+        statusEl.style.color='green';
+        statusEl.textContent = 'Respuesta enviada (no hay datos devueltos)';
+      }
+
+      // limpiar selección visual
+      if (playerMarker) { playerMarker.remove(); playerMarker = null; }
+      selectedLat = selectedLon = null; coordsEl.value = '';
+    } catch(err){
+      console.error('Insert error', err);
+      statusEl.style.color='crimson';
+      statusEl.textContent = 'Error al insertar: ' + (err.message || JSON.stringify(err));
     }
+  });
 
-    document.getElementById("status").innerText =
-        "✔ Respuesta enviada correctamente.";
-});
-</script>
+  // precargar alias/email si existen
+  if (saved) {
+    if (saved.alias) aliasEl.value = saved.alias;
+  }
+
+}); // fin DOMContentLoaded
+  </script>
 
 </body>
 </html>
