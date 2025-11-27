@@ -1,3 +1,141 @@
-const SUPABASE_URL ='https://czppmgrvffpuoiaoduxx.supabase.co';
-const SUPABASE_KEY = 'process.env.SUPABASE_KEY';
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Juego: ¿Qué tanto conoces Bogotá?</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <!-- LEAFLET -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #map {
+            height: 420px;
+            border: 2px solid #333;
+            margin-top: 15px;
+        }
+        button {
+            margin-top: 15px;
+            padding: 12px;
+            background-color: #0055cc;
+            color: white;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        button:hover {
+            background-color: #003d99;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>Juego de Localización de Bogotá</h2>
+<p>Haz clic en el mapa para seleccionar el punto donde crees que está el sitio elegido.</p>
+
+<!-- FORMULARIO -->
+<form id="gameForm">
+    <label><b>Alias (nombre en el juego):</b></label><br>
+    <input type="text" id="alias" required placeholder="Ej: Jugador01"><br><br>
+
+    <label><b>Selecciona el sitio que quieres localizar:</b></label><br>
+    <select id="site">
+        <option value="p1">Sitio 1</option>
+        <option value="p2">Sitio 2</option>
+        <option value="p3">Sitio 3</option>
+        <option value="p4">Sitio 4</option>
+        <option value="p5">Sitio 5</option>
+    </select>
+</form>
+
+<!-- MAPA -->
+<div id="map"></div>
+
+<!-- BOTÓN -->
+<button id="sendBtn">Enviar ubicación</button>
+
+<!-- SCRIPT PRINCIPAL -->
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+/* -----------------------------
+   🔗 CONEXIÓN A SUPABASE
+--------------------------------*/
+const SUPABASE_URL = 'https://czppmgrvffpuoiaoduxx.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* -----------------------------
+   🗺️ MAPA LEAFLET
+--------------------------------*/
+let lat = null;
+let lng = null;
+
+const map = L.map('map').setView([4.65, -74.1], 12); // Bogotá centro
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19
+}).addTo(map);
+
+let marker = null;
+
+map.on("click", function (e) {
+    lat = e.latlng.lat;
+    lng = e.latlng.lng;
+
+    if (marker) {
+        marker.remove();
+    }
+
+    marker = L.marker([lat, lng]).addTo(map);
+});
+
+/* -----------------------------
+   📤 ENVÍO DE DATOS A SUPABASE
+--------------------------------*/
+document.getElementById("sendBtn").addEventListener("click", async () => {
+    const alias = document.getElementById("alias").value;
+    const site = document.getElementById("site").value;
+
+    if (!alias) {
+        alert("Debes ingresar un alias.");
+        return;
+    }
+
+    if (!lat || !lng) {
+        alert("Selecciona un punto en el mapa.");
+        return;
+    }
+
+    const { data, error } = await supabase
+        .from("responses")
+        .insert({
+            alias: alias,
+            site: site,
+            lat: lat,
+            lng: lng
+        });
+
+    if (error) {
+        console.error(error);
+        alert("❌ Error al enviar: " + error.message);
+    } else {
+        alert("✅ Respuesta enviada correctamente.");
+        // limpiar marcador
+        if (marker) marker.remove();
+        lat = null;
+        lng = null;
+    }
+});
+</script>
+
+</body>
+</html>
