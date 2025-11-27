@@ -1,234 +1,138 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>Localiza Bogotá - Player (corregido)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta charset="UTF-8">
+    <title>¡Localiza Bogotá!</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet CSS (necesario en HEAD) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <style>
-    body{font-family:Arial,Helvetica,sans-serif;margin:14px}
-    h1{margin:0 0 8px}
-    label{font-weight:600}
-    select,input,button{padding:8px;font-size:14px}
-    #map{width:100%; height:520px; border:2px solid #444; margin-top:12px}
-    #status{margin-top:12px; font-size:14px}
-    .row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
-  </style>
+    <!-- Supabase UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #map { height: 500px; width: 100%; margin-top: 15px; border: 1px solid #aaa; }
+        select, button { padding: 5px; }
+    </style>
 </head>
 <body>
-  <h1>¡Localiza Bogotá!</h1>
-  <p class="small">Selecciona un sitio y haz clic en el mapa para marcar tu respuesta.</p>
 
-  <div class="row">
-    <div>
-      <label for="sitioSelect">Sitio a ubicar</label><br>
-      <select id="sitioSelect"><option value="">Cargando...</option></select>
-    </div>
+<h1>¡Localiza Bogotá!</h1>
+Selecciona un sitio y haz clic en el mapa para marcar tu respuesta.
+<br><br>
 
-    <div>
-      <label for="alias">Alias (opcional)</label><br>
-      <input id="alias" placeholder="tu alias"/>
-    </div>
+<label for="sitioSelect">Sitio a ubicar:</label>
+<select id="sitioSelect">
+    <option value="">Cargando sitios...</option>
+</select>
 
-    <div>
-      <button id="btnRegister">Registrar (opcional)</button>
-    </div>
-  </div>
+<div id="map"></div>
 
-  <div id="map" aria-label="Mapa interactivo"></div>
+<br>
+<button id="btnEnviar">Enviar respuesta</button>
 
-  <div style="margin-top:10px;">
-    Coordenadas seleccionadas: <input id="coords" readonly style="width:220px"/>
-    <button id="btnSend" style="margin-left:12px;">Enviar respuesta</button>
-  </div>
+<script>
+    /* ---------------------------
+       CONFIGURACIÓN SUPABASE
+    ----------------------------*/
+    const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o";
 
-  <div id="status"></div>
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Supabase UMD (robusto para páginas estáticas) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 
-  <script>
-  (function(){
-    // ---------- CONFIG ----------
-    const SUPABASE_URL = 'https://czppmgrvffpuoiaoduxx.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls';
+    /* ---------------------------
+       INICIALIZAR MAPA
+    ----------------------------*/
+    const map = L.map('map').setView([4.65, -74.1], 12);
 
-    // ---------- elementos ----------
-    const sitioSelect = document.getElementById('sitioSelect');
-    const coordsInput = document.getElementById('coords');
-    const statusDiv = document.getElementById('status');
-    const btnSend = document.getElementById('btnSend');
-    const aliasInput = document.getElementById('alias');
-    const btnRegister = document.getElementById('btnRegister');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
 
-    // ---------- cliente supabase ----------
-    let supabase;
-    try {
-      supabase = supabasejs.createClient(SUPABASE_URL, SUPABASE_KEY);
-      console.log('Supabase client creado');
-    } catch(e){
-      console.error('Error creando supabase client', e);
-      statusDiv.textContent = 'Error interno: no se pudo inicializar Supabase (ver consola).';
-      return;
-    }
+    let marcador = null;
+    let latSeleccionada = null;
+    let lonSeleccionada = null;
 
-    // ---------- estado ----------
-    let jugador = null; // { jugador_id, alias, anon_code }
-    let selectedLat = null, selectedLon = null;
-    let playerMarker = null;
 
-    // Esperar DOM fully loaded
-    document.addEventListener('DOMContentLoaded', async () => {
-      // 1) Inicializar mapa
-      try {
-        window.map = L.map('map').setView([4.65, -74.08], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19, attribution: '&copy; OpenStreetMap'
-        }).addTo(window.map);
-        console.log('Mapa inicializado');
-      } catch(err){
-        console.error('Error inicializando Leaflet:', err);
-        statusDiv.textContent = 'Error inicializando mapa (ver consola).';
-        return;
-      }
+    /* ---------------------------
+       CAPTURAR CLIC EN EL MAPA
+    ----------------------------*/
+    map.on("click", function (e) {
+        latSeleccionada = e.latlng.lat;
+        lonSeleccionada = e.latlng.lng;
 
-      // click en mapa: crear marcador y guardar coordenadas
-      map.on('click', function(e){
-        selectedLat = Number(e.latlng.lat.toFixed(6));
-        selectedLon = Number(e.latlng.lng.toFixed(6));
-        coordsInput.value = `${selectedLat}, ${selectedLon}`;
-        if (playerMarker) playerMarker.remove();
-        playerMarker = L.marker([selectedLat, selectedLon]).addTo(map);
-        statusDiv.textContent = `Punto seleccionado: ${selectedLat}, ${selectedLon}`;
-        console.log('Click mapa', selectedLat, selectedLon);
-      });
+        if (marcador) map.removeLayer(marcador);
 
-      // 2) cargar sitios (intentamos desde tabla sitios_oficiales)
-      await loadSitios();
+        marcador = L.marker([latSeleccionada, lonSeleccionada]).addTo(map);
+    });
 
-      // 3) register optional button: crear jugador si quiere
-      btnRegister.addEventListener('click', async () => {
-        const alias = (aliasInput.value || '').trim();
-        if (!alias) { statusDiv.textContent = 'Ingresa un alias para registrar (opcional).'; return; }
-        statusDiv.textContent = 'Registrando...';
-        try {
-          const res = await supabase.from('jugadores').insert([{ alias, anon_code: alias }]).select().single();
-          if (res.error) throw res.error;
-          jugador = { jugador_id: res.data.id, alias: alias, anon_code: alias };
-          localStorage.setItem('localiza_jugador', JSON.stringify(jugador));
-          statusDiv.textContent = `Jugador registrado (id: ${jugador.jugador_id})`;
-        } catch(err){
-          console.error('Error registrar jugador', err);
-          statusDiv.textContent = 'Error registrando jugador (ver consola).';
-        }
-      });
 
-      // 4) enviar respuesta
-      btnSend.addEventListener('click', async () => {
-        statusDiv.style.color = 'black';
-        statusDiv.textContent = 'Enviando...';
-        if (!selectedLat || !selectedLon) { statusDiv.style.color='crimson'; statusDiv.textContent = 'Selecciona un punto en el mapa.'; return; }
+    /* ---------------------------
+       CARGAR LISTA DE SITIOS
+    ----------------------------*/
+    async function cargarSitios() {
+        const { data, error } = await client
+            .from("sitios_oficiales")
+            .select("*");
 
-        // intentar usar jugador guardado
-        if (!jugador) {
-          const saved = localStorage.getItem('localiza_jugador');
-          if (saved) jugador = JSON.parse(saved);
-        }
+        const select = document.getElementById("sitioSelect");
 
-        // si no hay jugador, crear anónimo automático
-        if (!jugador) {
-          try {
-            const a = 'anon_' + Math.floor(Math.random()*10000);
-            const ins = await supabase.from('jugadores').insert([{ alias: a, anon_code: a }]).select().single();
-            if (ins.error) throw ins.error;
-            jugador = { jugador_id: ins.data.id, alias: a, anon_code: a };
-            localStorage.setItem('localiza_jugador', JSON.stringify(jugador));
-            console.log('Jugador anónimo creado', jugador);
-          } catch(err){
-            console.error('No se pudo crear jugador anónimo', err);
-            statusDiv.style.color='crimson';
-            statusDiv.textContent = 'Error creando jugador anónimo (ver consola).';
+        if (error) {
+            select.innerHTML = `<option>Error cargando sitios</option>`;
+            console.error(error);
             return;
-          }
         }
 
-        const sitio_clave = sitioSelect.value;
-        if (!sitio_clave) { statusDiv.style.color='crimson'; statusDiv.textContent='Selecciona un sitio.'; return; }
+        select.innerHTML = "";
 
-        try {
-          const payload = {
-            jugador_id: jugador.jugador_id,
-            sitio_clave,
-            lat: selectedLat,
-            lon: selectedLon
-          };
-          console.log('Insert payload', payload);
-          const { data, error } = await supabase.from('respuestas_juego').insert([payload]).select().limit(1);
-          if (error) throw error;
-          console.log('Insert result', data);
-          // si trigger devuelve distancia/puntaje, mostrarlo
-          if (data && data[0] && data[0].distancia_m !== undefined) {
-            statusDiv.style.color='green';
-            statusDiv.innerHTML = `Registrado. Distancia: <b>${Math.round(data[0].distancia_m)} m</b>, Puntaje: <b>${data[0].puntaje}</b>`;
-          } else {
-            statusDiv.style.color='green';
-            statusDiv.textContent = 'Respuesta registrada correctamente.';
-          }
-        } catch(err){
-          console.error('Error insert respuesta', err);
-          statusDiv.style.color='crimson';
-          statusDiv.textContent = 'Error registrando respuesta (ver consola).';
-        }
-      });
-
-      // si hay jugador guardado, mostrarlo
-      const saved = localStorage.getItem('localiza_jugador');
-      if (saved) {
-        try { jugador = JSON.parse(saved); statusDiv.textContent = `Jugador recuperado: ${jugador.alias}`; } catch(e){}
-      }
-    }); // DOMContentLoaded
-
-    // ---------------- helper: loadSitios ----------------
-    async function loadSitios(){
-      sitioSelect.innerHTML = '<option value="">Cargando sitios...</option>';
-      try {
-        const { data, error } = await supabase.from('sitios_oficiales').select('sitio_clave, lat, lon').order('sitio_clave');
-        if (error) throw error;
-        if (data && data.length) {
-          sitioSelect.innerHTML = '<option value="">-- seleccionar --</option>';
-          data.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.sitio_clave;
-            opt.text = `${s.sitio_clave} — (${Number(s.lat).toFixed(5)}, ${Number(s.lon).toFixed(5)})`;
-            sitioSelect.appendChild(opt);
-            // mostrar pequeño círculo en mapa
-            try {
-              L.circle([s.lat, s.lon], { radius: 60, color:'#d00', fill:false }).addTo(map);
-            } catch(e){}
-          });
-        } else {
-          // fallback
-          sitioSelect.innerHTML = `
-            <option value="">-- seleccionar --</option>
-            <option value="p1">p1 — Plaza de Bolívar</option>
-            <option value="p2">p2 — Parque 93</option>
-            <option value="p3">p3 — Museo Nacional</option>
-            <option value="p4">p4 — Movistar Arena</option>
-            <option value="p5">p5 — Aeropuerto El Dorado</option>
-          `;
-        }
-      } catch(err){
-        console.warn('loadSitios error', err);
-        sitioSelect.innerHTML = '<option value="">-- seleccionar --</option><option value="p1">p1</option><option value="p2">p2</option>';
-      }
+        data.forEach(s => {
+            const option = document.createElement("option");
+            option.value = s.sitio_clave;
+            option.textContent = `${s.sitio_clave} – ${s.sitio_nombre}`;
+            select.appendChild(option);
+        });
     }
 
-  })();
-  </script>
+    cargarSitios();
+
+
+    /* ---------------------------
+       ENVIAR RESPUESTA
+    ----------------------------*/
+    document.getElementById("btnEnviar").addEventListener("click", async function () {
+
+        const sitio = document.getElementById("sitioSelect").value;
+
+        if (!sitio) {
+            alert("Selecciona un sitio.");
+            return;
+        }
+        if (!latSeleccionada || !lonSeleccionada) {
+            alert("Haz clic en el mapa para seleccionar la ubicación.");
+            return;
+        }
+
+        const { data, error } = await client
+            .from("respuestas_juego")
+            .insert({
+                sitio_clave: sitio,
+                lat: latSeleccionada,
+                lon: lonSeleccionada
+            });
+
+        if (error) {
+            alert("Error al guardar la respuesta.");
+            console.error(error);
+        } else {
+            alert("¡Respuesta registrada correctamente!");
+        }
+    });
+
+</script>
+
 </body>
 </html>
