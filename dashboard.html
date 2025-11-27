@@ -1,146 +1,121 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Dashboard – Resultados del Juego</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <title>Dashboard - Resultados del Juego</title>
 
-<!-- Leaflet -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<!-- Supabase -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<style>
-    body { font-family: Arial; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
-    th { background: #eee; }
-    #map { height: 500px; margin-top: 20px; border: 1px solid #888; }
-</style>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        table, th, td { border: 1px solid #ccc; }
+        th, td { padding: 10px; text-align: left; }
+        #map { height: 400px; margin-top: 20px; }
+        h2 { margin-top: 40px; }
+    </style>
 </head>
 
 <body>
 
-<h1>Dashboard del Juego</h1>
-<p>Visualización en tiempo real de las respuestas enviadas por los jugadores.</p>
-
-<h2>Mapa de respuestas</h2>
-<div id="map"></div>
+<h1>Dashboard de Resultados</h1>
 
 <h2>Tabla de respuestas</h2>
-<table id="tablaRespuestas">
+<table id="tablaResultados">
     <thead>
         <tr>
             <th>ID</th>
-            <th>Sitio</th>
-            <th>Lat</th>
-            <th>Lon</th>
+            <th>Alias</th>
+            <th>Punto Seleccionado</th>
+            <th>Latitud</th>
+            <th>Longitud</th>
             <th>Fecha</th>
         </tr>
     </thead>
     <tbody></tbody>
 </table>
 
+<h2>Mapa de localizaciones</h2>
+<div id="map"></div>
+
 <script>
-/* ---------------------------------------------------
-   CONFIGURACIÓN SUPABASE
---------------------------------------------------- */
-const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
-const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o";
+    // ========================
+    // CONFIGURACIÓN SUPABASE
+    // ========================
 
-const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o";
 
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ---------------------------------------------------
-   MAPA LEAFLET
---------------------------------------------------- */
-const map = L.map("map").setView([4.65, -74.1], 12);
+    // ========================
+    // CARGAR RESULTADOS
+    // ========================
+    async function cargarResultados() {
+        const { data, error } = await supabase
+            .from("respuestas_juego")
+            .select("*")
+            .order("id", { ascending: true });
 
-// Capa base OSM
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19
-}).addTo(map);
+        if (error) {
+            console.error("Error cargando datos:", error);
+            return;
+        }
 
-// Capa donde se colocarán los marcadores
-const capaRespuestas = L.layerGroup().addTo(map);
-
-
-/* ---------------------------------------------------
-   FUNCIÓN: Cargar todas las respuestas
---------------------------------------------------- */
-async function cargarRespuestas() {
-    const { data, error } = await client
-        .from("respuestas_juego")
-        .select("*")
-        .order("fecha", { ascending: false });
-
-    if (error) {
-        console.error("Error obteniendo respuestas:", error);
-        return;
+        renderTabla(data);
+        renderMapa(data);
     }
 
-    actualizarTabla(data);
-    actualizarMapa(data);
-}
+    // ========================
+    // RENDER TABLA
+    // ========================
+    function renderTabla(datos) {
+        const tbody = document.querySelector("#tablaResultados tbody");
+        tbody.innerHTML = "";
 
+        datos.forEach(item => {
+            const fila = `
+                <tr>
+                    <td>${item.id}</td>
+                    <td>${item.alias || "-"}</td>
+                    <td>${item.punto || "-"}</td>
+                    <td>${item.lat || "-"}</td>
+                    <td>${item.lng || "-"}</td>
+                    <td>${item.created_at}</td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML("beforeend", fila);
+        });
+    }
 
-/* ---------------------------------------------------
-   ACTUALIZAR TABLA
---------------------------------------------------- */
-function actualizarTabla(filas) {
-    const tbody = document.querySelector("#tablaRespuestas tbody");
-    tbody.innerHTML = "";
+    // ========================
+    // RENDER MAPA
+    // ========================
+    let mapa;
+    function renderMapa(datos) {
+        if (!mapa) {
+            mapa = L.map("map").setView([4.5, -74.1], 7);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "&copy; OpenStreetMap contributors"
+            }).addTo(mapa);
+        }
 
-    filas.forEach(f => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${f.id}</td>
-            <td>${f.sitio_clave}</td>
-            <td>${f.lat.toFixed(6)}</td>
-            <td>${f.lon.toFixed(6)}</td>
-            <td>${new Date(f.fecha).toLocaleString()}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
+        datos.forEach(p => {
+            if (p.lat && p.lng) {
+                L.marker([p.lat, p.lng])
+                    .addTo(mapa)
+                    .bindPopup(`<b>${p.alias}</b><br>Punto: ${p.punto}`);
+            }
+        });
+    }
 
-
-/* ---------------------------------------------------
-   ACTUALIZAR MAPA
---------------------------------------------------- */
-function actualizarMapa(filas) {
-    capaRespuestas.clearLayers();
-
-    filas.forEach(f => {
-        L.marker([f.lat, f.lon])
-            .bindPopup(`<b>${f.sitio_clave}</b><br>Lat: ${f.lat}<br>Lon: ${f.lon}`)
-            .addTo(capaRespuestas);
-    });
-}
-
-
-/* ---------------------------------------------------
-   SUSCRIPCIÓN EN TIEMPO REAL
---------------------------------------------------- */
-client
-  .channel("rt-respuestas")
-  .on("postgres_changes", 
-      { event: "INSERT", schema: "public", table: "respuestas_juego" },
-      payload => {
-          console.log("Nueva respuesta:", payload.new);
-          cargarRespuestas();  // refresca el dashboard automáticamente
-      }
-  )
-  .subscribe();
-
-
-/* ---------------------------------------------------
-   CARGA INICIAL
---------------------------------------------------- */
-cargarRespuestas();
-
+    // Ejecutar carga
+    cargarResultados();
 </script>
 
 </body>
