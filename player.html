@@ -18,6 +18,7 @@
       overflow-y: auto;
       font-size: 13px;
       white-space: pre-wrap;
+      border-radius: 6px;
     }
   </style>
 </head>
@@ -40,7 +41,7 @@
     // CONFIGURACIÓN SUPABASE
     // ---------------------------------------------------------
     const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o"; // segura para frontend
+    const SUPABASE_KEY = "sb_publishable_Qf5GqauZh78nEiS950bVew_FzihB41o";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -57,13 +58,13 @@
     async function loadMedia() {
       log("Inicializando conexión con Supabase...");
 
-      // Cambia estos valores según tu bucket y archivo
-      const bucketName = "videos";
-      const fileName = "demo.mp4";
+      const bucketName = "videos";  // cambiar según tu bucket
+      const fileName = "demo.mp4";  // cambiar según tu archivo
 
-      log("Solicitando URL pública...");
+      log("Solicitando URL pública al bucket '" + bucketName + "' ...");
 
-      const { data: publicUrlData, error } = await supabase
+      // Nueva sintaxis correcta del SDK
+      const { data, error } = supabase
         .storage
         .from(bucketName)
         .getPublicUrl(fileName);
@@ -74,29 +75,38 @@
         return;
       }
 
-      const fileUrl = publicUrlData.publicUrl;
-      log("✔ Archivo encontrado: " + fileUrl);
+      const publicUrl = data?.publicUrl;
+
+      if (!publicUrl) {
+        log("❌ No se generó URL pública. Verifica el bucket y el archivo.");
+        alert("Error: archivo no encontrado en el bucket.");
+        return;
+      }
+
+      log("✔ Archivo encontrado:");
+      log(publicUrl);
 
       // Detectar tipo según extensión
       if (fileName.endsWith(".mp4") || fileName.endsWith(".webm")) {
         const video = document.getElementById("player");
-        video.src = fileUrl;
+        video.src = publicUrl;
         video.style.display = "block";
         video.play();
         log("🎬 Reproduciendo video...");
-      } else if (fileName.endsWith(".mp3") || fileName.endsWith(".wav")) {
+      } 
+      else if (fileName.endsWith(".mp3") || fileName.endsWith(".wav")) {
         const audio = document.getElementById("player-audio");
-        audio.src = fileUrl;
+        audio.src = publicUrl;
         audio.style.display = "block";
         audio.play();
         log("🎵 Reproduciendo audio...");
-      } else {
-        log("⚠ Tipo de archivo no soportado.");
+      } 
+      else {
+        log("⚠ Tipo de archivo no soportado: " + fileName);
       }
     }
 
     loadMedia();
-
   </script>
 
 </body>
