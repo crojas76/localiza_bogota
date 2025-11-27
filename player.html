@@ -4,11 +4,16 @@
     <meta charset="UTF-8">
     <title>Juego Geográfico</title>
 
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <style>
         body { font-family: Arial; margin: 20px; }
-        #map { width: 100%; height: 400px; background: #ddd; margin-top: 15px; }
+        #map { width: 100%; height: 450px; margin-top: 15px; border: 2px solid #444; }
         .btn { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
         .btn:disabled { background: #888; }
         input { padding: 8px; width: 300px; }
@@ -26,8 +31,9 @@
 
 <hr>
 
-<h3>Selecciona un punto en el mapa:</h3>
-<div id="map">Haz clic aquí para seleccionar tu punto</div>
+<h3>Haz clic en el mapa para seleccionar tu respuesta</h3>
+
+<div id="map"></div>
 
 <p id="coords">Lat: — | Lon: —</p>
 
@@ -39,9 +45,9 @@
 <p id="msg"></p>
 
 <script>
-// ---------------------------------------------------------------------
+// ------------------------------------------------------
 // 1. CONFIGURAR SUPABASE
-// ---------------------------------------------------------------------
+// ------------------------------------------------------
 const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
 
@@ -51,9 +57,9 @@ let jugadorID = null;
 let latSel = null;
 let lonSel = null;
 
-// ---------------------------------------------------------------------
+// ------------------------------------------------------
 // 2. REGISTRAR JUGADOR
-// ---------------------------------------------------------------------
+// ------------------------------------------------------
 async function registrarJugador() {
     const alias = document.getElementById("alias").value;
     if (!alias) {
@@ -79,32 +85,53 @@ async function registrarJugador() {
     document.getElementById("btnEnviar").disabled = false;
 }
 
-// ---------------------------------------------------------------------
-// 3. MAPA SIMPLIFICADO (CLICK PARA OBTENER COORDENADAS)
-// ---------------------------------------------------------------------
-document.getElementById("map").addEventListener("click", function (e) {
-    // Mapa "simulado": genera coordenadas aleatorias dentro de Bogotá
-    latSel = 4.5 + Math.random() * 0.3;  
-    lonSel = -74.2 + Math.random() * 0.25;
+// ------------------------------------------------------
+// 3. MAPA LEAFLET REAL
+// ------------------------------------------------------
+let map = L.map('map').setView([4.65, -74.1], 12); // Bogotá centro
 
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+}).addTo(map);
+
+let marcador = null;
+
+// Cuando el usuario hace clic en el mapa
+map.on("click", function (e) {
+    latSel = e.latlng.lat;
+    lonSel = e.latlng.lng;
+
+    // Eliminar marcador previo
+    if (marcador) {
+        map.removeLayer(marcador);
+    }
+
+    // Crear nuevo marcador
+    marcador = L.marker([latSel, lonSel]).addTo(map);
+
+    // Mostrar coordenadas
     document.getElementById("coords").innerText =
         `Lat: ${latSel.toFixed(6)} | Lon: ${lonSel.toFixed(6)}`;
 });
 
-// ---------------------------------------------------------------------
-// 4. ENVIAR RESPUESTA A LA TABLA CORRECTA: respuestas_juego
-// ---------------------------------------------------------------------
+// ------------------------------------------------------
+// 4. ENVIAR RESPUESTA → Tabla: respuestas_juego
+// ------------------------------------------------------
 async function enviarRespuesta() {
     if (!jugadorID) {
         alert("Primero registra un jugador.");
         return;
     }
     if (!latSel || !lonSel) {
-        alert("Debes seleccionar un punto en el mapa.");
+        alert("Haz clic en el mapa para seleccionar un punto.");
         return;
     }
 
     const sitio = document.getElementById("sitio_clave").value;
+    if (!sitio) {
+        alert("Ingresa la clave del sitio.");
+        return;
+    }
 
     const { error } = await supabase
         .from("respuestas_juego")
@@ -129,3 +156,4 @@ async function enviarRespuesta() {
 
 </body>
 </html>
+
