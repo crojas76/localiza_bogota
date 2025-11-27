@@ -1,274 +1,165 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>Juego — Localiza Bogotá</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8">
+    <title>Juego de Geolocalización</title>
 
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-  <style>
-    body{font-family:Arial,Helvetica,sans-serif;margin:12px}
-    h1{margin:0 0 8px}
-    #map{height:60vh;border:1px solid #ccc;margin:10px 0}
-    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    label{font-weight:600}
-    input,select,button{padding:8px;font-size:14px}
-    #status{margin-top:10px;color:green}
-    .small{font-size:12px;color:#666}
-  </style>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        #map {
+            height: 400px;
+            margin-bottom: 20px;
+            border: 2px solid #333;
+        }
+
+        select, button {
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 16px;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <h1>¡Localiza Bogotá!</h1>
-  <p class="small">Regístrate (alias), selecciona un sitio y toca el mapa para marcar la ubicación. Luego pulsa Enviar.</p>
 
-  <div class="controls">
-    <div>
-      <label>Alias</label><br>
-      <input id="alias" placeholder="tu alias" />
-    </div>
+<h2>Juego de Geolocalización</h2>
 
-    <div>
-      <label>Email (opcional)</label><br>
-      <input id="email" placeholder="tu@mail.com" />
-    </div>
+<p><strong>Selecciona el sitio y luego haz clic en el mapa para marcar tu respuesta.</strong></p>
 
-    <div>
-      <label>Sitio a ubicar</label><br>
-      <select id="sitio">
-        <option value="">Cargando sitios...</option>
-      </select>
-    </div>
+<!-- Selección del sitio -->
+<label for="sitio">Sitio a adivinar:</label>
+<select id="sitio">
+    <option value="p1">p1 – Plaza de Bolívar</option>
+    <option value="p2">p2 – Parque 93</option>
+    <option value="p3">p3 – Museo Nacional</option>
+    <option value="p4">p4 – Movistar Arena</option>
+    <option value="p5">p5 – Aeropuerto El Dorado</option>
+</select>
 
-    <div style="align-self:end">
-      <button id="registerBtn">Registrar / Actualizar</button>
-    </div>
-  </div>
+<!-- Mapa -->
+<div id="map"></div>
 
-  <div id="map"></div>
+<button id="btnEnviar">Enviar Respuesta</button>
 
-  <div class="controls">
-    <div>
-      Coordenadas seleccionadas: <input id="coords" readonly style="width:220px"/>
-    </div>
-    <div>
-      <button id="sendBtn">Enviar respuesta</button>
-    </div>
-  </div>
+<p id="status"></p>
 
-  <div id="status" class="small"></div>
-
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Supabase JS (UMD) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- SUPABASE -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', async () => {
+/* ---------------------------------------------------------
+   CONFIGURACIÓN SUPABASE (TU INFORMACIÓN REAL)
+--------------------------------------------------------- */
+const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
 
-  // ----------------------------
-  // CONFIG: reemplaza si quieres
-  // ----------------------------
-  const SUPABASE_URL = 'https://czppmgrvffpuoiaoduxx.supabase.co';
-  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const supabase = supabasejs.createClient(SUPABASE_URL, SUPABASE_KEY);
+/* ---------------------------------------------------------
+   VARIABLES
+--------------------------------------------------------- */
+let jugadorID = null;
+let selectedLat = null;
+let selectedLon = null;
+let marker = null;
 
-  // ----------------------------
-  // Elementos DOM
-  // ----------------------------
-  const aliasEl = document.getElementById('alias');
-  const emailEl = document.getElementById('email');
-  const sitioEl = document.getElementById('sitio');
-  const registerBtn = document.getElementById('registerBtn');
-  const sendBtn = document.getElementById('sendBtn');
-  const coordsEl = document.getElementById('coords');
-  const statusEl = document.getElementById('status');
+/* ---------------------------------------------------------
+   1. REGISTRA AUTOMÁTICAMENTE AL JUGADOR ANÓNIMO
+--------------------------------------------------------- */
+async function registrarJugador() {
+    const alias = "jugador_" + Math.floor(Math.random() * 9999);
 
-  // ----------------------------
-  // Estado local (localStorage)
-  // ----------------------------
-  const STORAGE_KEY = 'localiza_bogota_player';
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e){ saved = null; }
+    const { data, error } = await supabase
+        .from("jugadores")
+        .insert([{ alias: alias, correo: null, anon_code: alias }])
+        .select()
+        .single();
 
-  // ----------------------------
-  // Inicializar mapa
-  // ----------------------------
-  const map = L.map('map').setView([4.65, -74.08], 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'© OpenStreetMap contributors' }).addTo(map);
-
-  // capa de sitios oficiales (opcional)
-  const officialLayer = L.layerGroup().addTo(map);
-
-  // marcador del jugador
-  let playerMarker = null;
-  let selLat = null, selLon = null;
-
-  map.on('click', (e) => {
-    selLat = Number(e.latlng.lat.toFixed(6));
-    selLon = Number(e.latlng.lng.toFixed(6));
-    coordsEl.value = `${selLat}, ${selLon}`;
-    if (playerMarker) playerMarker.remove();
-    playerMarker = L.marker([selLat, selLon]).addTo(map);
-  });
-
-  // ----------------------------
-  // Cargar sitios oficiales desde la tabla sitios_oficiales
-  // ----------------------------
-  async function loadSites() {
-    sitioEl.innerHTML = '<option value="">Cargando sitios...</option>';
-    try {
-      const { data, error } = await supabase.from('sitios_oficiales').select('*').order('sitio_clave', { ascending:true });
-      if (error) throw error;
-      if (data && data.length) {
-        sitioEl.innerHTML = '<option value="">-- seleccionar --</option>';
-        data.forEach(s => {
-          const opt = document.createElement('option');
-          opt.value = s.sitio_clave;
-          opt.text = `${s.sitio_clave} — (${s.lat.toFixed(5)}, ${s.lon.toFixed(5)})`;
-          sitioEl.appendChild(opt);
-
-          // mostrar en el mapa los sitios oficiales con círculo pequeño
-          const c = L.circle([s.lat, s.lon], { radius:50, color:'#c00', fill:false }).bindPopup(`${s.sitio_clave}`);
-          officialLayer.addLayer(c);
-        });
-      } else {
-        // fallback si no hay registros
-        sitioEl.innerHTML = `
-          <option value="">-- seleccionar --</option>
-          <option value="p1">p1 — Plaza de Bolívar</option>
-          <option value="p2">p2 — Parque 93</option>
-          <option value="p3">p3 — Museo Nacional</option>
-          <option value="p4">p4 — Movistar Arena</option>
-          <option value="p5">p5 — Aeropuerto El Dorado</option>
-        `;
-      }
-    } catch(err){
-      console.warn('No se pudieron cargar sitios_oficiales:', err.message || err);
-      sitioEl.innerHTML = `
-        <option value="">-- seleccionar --</option>
-        <option value="p1">p1 — Plaza de Bolívar</option>
-        <option value="p2">p2 — Parque 93</option>
-        <option value="p3">p3 — Museo Nacional</option>
-        <option value="p4">p4 — Movistar Arena</option>
-        <option value="p5">p5 — Aeropuerto El Dorado</option>
-      `;
-    }
-  }
-
-  await loadSites();
-
-  // ----------------------------
-  // Registrar / recuperar jugador
-  // ----------------------------
-  async function ensurePlayer(alias, email) {
-    // si ya hay saved y alias/email coinciden, intentar reutilizar
-    if (saved && saved.anon_code && saved.alias === alias && saved.email === email && saved.jugador_id) {
-      return saved;
+    if (error) {
+        document.getElementById("status").innerText =
+            "❌ Error creando jugador: " + error.message;
+        return;
     }
 
-    // si existe anon_code, buscar jugador
-    if (saved && saved.anon_code) {
-      const { data: existing, error: selErr } = await supabase.from('jugadores').select('*').eq('anon_code', saved.anon_code).limit(1);
-      if (!selErr && existing && existing.length>0) {
-        const jugador = existing[0];
-        // actualizar alias/email si cambiaron
-        if (jugador.alias !== alias || (jugador.correo||'') !== (email||'')) {
-          await supabase.from('jugadores').update({ alias: alias, correo: email || null }).eq('id', jugador.id);
-        }
-        const out = { anon_code: saved.anon_code, alias: alias, email: email||null, jugador_id: jugador.id };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); saved = out;
-        return out;
-      }
+    jugadorID = data.id;
+    console.log("Jugador registrado:", jugadorID);
+}
+
+registrarJugador();
+
+/* ---------------------------------------------------------
+   2. CREAR MAPA
+--------------------------------------------------------- */
+let map = L.map("map").setView([4.65, -74.1], 12);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap",
+}).addTo(map);
+
+/* ---------------------------------------------------------
+   3. PERMITIR SELECCIONAR CON CLIC EN EL MAPA
+--------------------------------------------------------- */
+map.on("click", (e) => {
+    selectedLat = e.latlng.lat;
+    selectedLon = e.latlng.lng;
+
+    if (marker) map.removeLayer(marker);
+
+    marker = L.marker([selectedLat, selectedLon]).addTo(map);
+
+    document.getElementById("status").innerText =
+        "📍 Punto seleccionado: " + selectedLat.toFixed(5) + ", " + selectedLon.toFixed(5);
+});
+
+/* ---------------------------------------------------------
+   4. ENVIAR RESPUESTA A SUPABASE
+--------------------------------------------------------- */
+document.getElementById("btnEnviar").addEventListener("click", async () => {
+
+    let sitio = document.getElementById("sitio").value;
+
+    if (!jugadorID) {
+        alert("Jugador no registrado aún. Espera unos segundos.");
+        return;
     }
 
-    // crear nuevo jugador
-    const anon_code = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+(b%16).toString(16),'');
-    const payload = { alias: alias, correo: email || null, anon_code: anon_code };
-    const { data, error } = await supabase.from('jugadores').insert([payload]).select().limit(1);
-    if (error) throw error;
-    const jugador = data[0];
-    const out = { anon_code: anon_code, alias: jugador.alias, email: jugador.correo, jugador_id: jugador.id };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(out)); saved = out;
-    return out;
-  }
-
-  // register button
-  registerBtn.addEventListener('click', async () => {
-    const alias = aliasEl.value && aliasEl.value.trim();
-    const email = emailEl.value && emailEl.value.trim();
-    if (!alias) { statusEl.style.color='crimson'; statusEl.textContent='Ingresa un alias.'; return; }
-    statusEl.style.color='black'; statusEl.textContent='Registrando...';
-    try {
-      const player = await ensurePlayer(alias, email);
-      statusEl.style.color='green';
-      statusEl.textContent = `Jugador listo (anon: ${player.anon_code}).`;
-    } catch(err) {
-      console.error(err);
-      statusEl.style.color='crimson';
-      statusEl.textContent = 'Error registrando: ' + (err.message||err);
+    if (selectedLat === null || selectedLon === null) {
+        alert("Debes seleccionar un punto en el mapa.");
+        return;
     }
-  });
 
-  // ----------------------------
-  // Enviar respuesta
-  // ----------------------------
-  sendBtn.addEventListener('click', async () => {
-    statusEl.style.color='black';
-    statusEl.textContent = 'Enviando...';
+    const { error } = await supabase
+        .from("respuestas_juego")
+        .insert([{
+            jugador_id: jugadorID,
+            sitio_clave: sitio,
+            lat: selectedLat,
+            lon: selectedLon
+        }]);
 
-    const alias = aliasEl.value && aliasEl.value.trim();
-    const email = emailEl.value && emailEl.value.trim();
-    const sitio_clave = sitioEl.value;
-
-    if (!alias) { statusEl.style.color='crimson'; statusEl.textContent='Ingresa un alias.'; return; }
-    if (!sitio_clave) { statusEl.style.color='crimson'; statusEl.textContent='Selecciona un sitio.'; return; }
-    if (selLat === null || selLon === null) { statusEl.style.color='crimson'; statusEl.textContent='Haz clic en el mapa para seleccionar coordenadas.'; return; }
-
-    try {
-      // asegurar jugador
-      const player = await ensurePlayer(alias, email);
-
-      // insertar respuesta en respuestas_juego
-      const payload = {
-        jugador_id: player.jugador_id,
-        sitio_clave: sitio_clave,
-        lat: selLat,
-        lon: selLon
-      };
-
-      const { data, error } = await supabase.from('respuestas_juego').insert([payload]).select().limit(1);
-      if (error) throw error;
-
-      const inserted = data && data[0];
-      statusEl.style.color='green';
-      if (inserted && inserted.distancia_m !== undefined) {
-        statusEl.innerHTML = `Respuesta registrada. Distancia: <b>${Math.round(inserted.distancia_m||0)} m</b>. Puntaje: <b>${inserted.puntaje||0}</b>.`;
-      } else {
-        statusEl.textContent = 'Respuesta registrada correctamente.';
-      }
-
-      // limpiar selección
-      if (playerMarker) { playerMarker.remove(); playerMarker = null; selLat = selLon = null; coordsEl.value=''; }
-    } catch(err){
-      console.error(err);
-      statusEl.style.color='crimson';
-      // si error proviene de estructura tabla, mostrar claramente
-      statusEl.textContent = 'Error al insertar: ' + (err.message || err);
+    if (error) {
+        document.getElementById("status").innerText =
+            "❌ Error al enviar: " + error.message;
+        return;
     }
-  });
 
-  // ----------------------------
-  // Restaurar datos guardados (prefill)
-  // ----------------------------
-  if (saved) {
-    if (saved.alias) aliasEl.value = saved.alias;
-    if (saved.email) emailEl.value = saved.email;
-  }
-
-}); // DOMContentLoaded
+    document.getElementById("status").innerText =
+        "✔ Respuesta enviada correctamente.";
+});
 </script>
+
 </body>
 </html>
