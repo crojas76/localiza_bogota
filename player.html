@@ -1,142 +1,131 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Player - Registrar Respuesta</title>
+    <meta charset="UTF-8">
+    <title>Juego Geográfico</title>
 
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        #map {
-            height: 400px;
-            width: 100%;
-            margin-bottom: 20px;
-            border: 2px solid #000;
-        }
-        .field {
-            margin-bottom: 10px;
-        }
-        button {
-            padding: 10px 15px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        #status {
-            margin-top: 15px;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-
-    <h2>Registrar Respuesta</h2>
-
-    <div id="map"></div>
-
-    <div class="field">
-        <label>Nombre jugador:</label>
-        <input type="text" id="player_name" placeholder="Tu nombre">
-    </div>
-
-    <div class="field">
-        <label>Pregunta:</label>
-        <input type="text" id="question" placeholder="Pregunta asignada">
-    </div>
-
-    <div class="field">
-        <label>Respuesta:</label>
-        <input type="text" id="answer" placeholder="Tu respuesta">
-    </div>
-
-    <div class="field">
-        <label>Latitud:</label>
-        <input type="text" id="lat" readonly>
-    </div>
-
-    <div class="field">
-        <label>Longitud:</label>
-        <input type="text" id="lng" readonly>
-    </div>
-
-    <button onclick="enviar()">Enviar</button>
-
-    <p id="status"></p>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <script>
-        // === CONFIGURACIÓN SUPABASE CORREGIDA ===
-        const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        #map { width: 100%; height: 400px; background: #ddd; margin-top: 15px; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        .btn:disabled { background: #888; }
+        input { padding: 8px; width: 300px; }
+    </style>
+</head>
 
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<body>
 
-        // === MAPA ===
-        const map = L.map("map").setView([4.6097, -74.0817], 12);
+<h2>Juego geográfico</h2>
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19
-        }).addTo(map);
+<label>Alias del jugador:</label><br>
+<input type="text" id="alias" placeholder="Tu nombre o alias"><br><br>
 
-        let marker = null;
+<button class="btn" onclick="registrarJugador()">Registrar jugador</button>
 
-        // Permitir selección de puntos como antes
-        map.on("click", function (e) {
-            const lat = e.latlng.lat.toFixed(6);
-            const lng = e.latlng.lng.toFixed(6);
+<hr>
 
-            document.getElementById("lat").value = lat;
-            document.getElementById("lng").value = lng;
+<h3>Selecciona un punto en el mapa:</h3>
+<div id="map">Haz clic aquí para seleccionar tu punto</div>
 
-            if (marker) map.removeLayer(marker);
-            marker = L.marker([lat, lng]).addTo(map);
-        });
+<p id="coords">Lat: — | Lon: —</p>
 
-        // === ENVIAR A SUPABASE ===
-        async function enviar() {
-            const player_name = document.getElementById("player_name").value.trim();
-            const question = document.getElementById("question").value.trim();
-            const answer = document.getElementById("answer").value.trim();
-            const lat = document.getElementById("lat").value.trim();
-            const lng = document.getElementById("lng").value.trim();
+<label>Clave del sitio (p1, p2, p3...):</label><br>
+<input type="text" id="sitio_clave" placeholder="Ej: p1"><br><br>
 
-            if (!player_name || !question || !answer || !lat || !lng) {
-                document.getElementById("status").innerHTML = "❌ Faltan campos por completar.";
-                return;
+<button class="btn" id="btnEnviar" onclick="enviarRespuesta()" disabled>Enviar respuesta</button>
+
+<p id="msg"></p>
+
+<script>
+// ---------------------------------------------------------------------
+// 1. CONFIGURAR SUPABASE
+// ---------------------------------------------------------------------
+const SUPABASE_URL = "https://czppmgrvffpuoiaoduxx.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6cHBtZ3J2ZmZwdW9pYW9kdXh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxODA5MDcsImV4cCI6MjA3OTc1NjkwN30.F6_tFQnnmPjwdzn8d2tr_WMO1E1HS8dIvlSfJTBBBls";
+
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let jugadorID = null;
+let latSel = null;
+let lonSel = null;
+
+// ---------------------------------------------------------------------
+// 2. REGISTRAR JUGADOR
+// ---------------------------------------------------------------------
+async function registrarJugador() {
+    const alias = document.getElementById("alias").value;
+    if (!alias) {
+        alert("Ingresa un alias");
+        return;
+    }
+
+    const anonCode = crypto.randomUUID().slice(0, 8);
+
+    const { data, error } = await supabase
+        .from("jugadores")
+        .insert([{ alias, anon_code: anonCode }])
+        .select()
+        .single();
+
+    if (error) {
+        alert("Error registrando: " + error.message);
+        return;
+    }
+
+    jugadorID = data.id;
+    document.getElementById("msg").innerText = "Jugador registrado correctamente.";
+    document.getElementById("btnEnviar").disabled = false;
+}
+
+// ---------------------------------------------------------------------
+// 3. MAPA SIMPLIFICADO (CLICK PARA OBTENER COORDENADAS)
+// ---------------------------------------------------------------------
+document.getElementById("map").addEventListener("click", function (e) {
+    // Mapa "simulado": genera coordenadas aleatorias dentro de Bogotá
+    latSel = 4.5 + Math.random() * 0.3;  
+    lonSel = -74.2 + Math.random() * 0.25;
+
+    document.getElementById("coords").innerText =
+        `Lat: ${latSel.toFixed(6)} | Lon: ${lonSel.toFixed(6)}`;
+});
+
+// ---------------------------------------------------------------------
+// 4. ENVIAR RESPUESTA A LA TABLA CORRECTA: respuestas_juego
+// ---------------------------------------------------------------------
+async function enviarRespuesta() {
+    if (!jugadorID) {
+        alert("Primero registra un jugador.");
+        return;
+    }
+    if (!latSel || !lonSel) {
+        alert("Debes seleccionar un punto en el mapa.");
+        return;
+    }
+
+    const sitio = document.getElementById("sitio_clave").value;
+
+    const { error } = await supabase
+        .from("respuestas_juego")
+        .insert([
+            {
+                jugador_id: jugadorID,
+                sitio_clave: sitio,
+                lat: latSel,
+                lon: lonSel
             }
+        ]);
 
-            const { data, error } = await supabase
-                .from("responses")
-                .insert({
-                    player_name: player_name,
-                    question: question,
-                    answer: answer,
-                    lat: parseFloat(lat),
-                    lng: parseFloat(lng)
-                });
-
-            if (error) {
-                document.getElementById("status").innerHTML = "❌ Error al enviar: " + error.message;
-            } else {
-                document.getElementById("status").innerHTML = "✅ Registro enviado correctamente.";
-            }
-        }
-    </script>
+    if (error) {
+        document.getElementById("msg").innerText =
+            "❌ Error al enviar: " + error.message;
+    } else {
+        document.getElementById("msg").innerText =
+            "✔️ Respuesta enviada correctamente.";
+    }
+}
+</script>
 
 </body>
 </html>
